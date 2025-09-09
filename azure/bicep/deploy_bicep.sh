@@ -428,7 +428,7 @@ main() {
 
     # Source the Azure CLI login module
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    source "${SCRIPT_DIR}/scripts/azure-cli-login.sh"
+    source "${SCRIPT_DIR}/../scripts/azure-cli-login.sh"
 
     azure_cli_login --client-id "${CLIENT_ID}" --client-secret "${CLIENT_SECRET}" --tenant-id "${TENANT_ID}" --subscription-id "${SUBSCRIPTION_ID}" ${DEBUG_FLAG:+--debug}
 
