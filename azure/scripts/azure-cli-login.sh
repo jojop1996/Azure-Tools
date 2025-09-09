@@ -11,7 +11,7 @@ check_azure_login_installed() {
   if ! command -v az &>/dev/null; then
     echo "[ERROR] Azure CLI is not installed"
     echo "[INFO] Install it from: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
-    return 1
+    exit 1
   fi
 
   echo "[INFO] Azure CLI is installed"
