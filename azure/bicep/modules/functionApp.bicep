@@ -2,12 +2,19 @@
 @minLength(1)
 param location string = resourceGroup().location
 
+@description('The name for your deployed function app.')
+param appName string
+
 @description('Language runtime used by the function app.')
 @allowed(['dotnet-isolated','python','java', 'node', 'powerShell'])
 param appRuntime string
 
 @description('Target language version used by the function app.')
 param appRuntimeVersion string
+
+@description('The type of hosting plan to use for the function app.')
+@allowed(['FlexConsumption', 'Consumption', 'Premium'])
+param planType string
 
 @description('The maximum scale-out instance count limit for the app.')
 @minValue(40)
@@ -21,13 +28,6 @@ param instanceMemoryMB int = 2048
 @description('A unique token used for resource name generation.')
 @minLength(3)
 param resourceToken string = toLower(uniqueString(subscription().id, location))
-
-@description('The name for your deployed function app.')
-param appName string
-
-@description('The type of hosting plan to use for the function app.')
-@allowed(['FlexConsumption', 'Consumption', 'Premium'])
-param planType string
 
 //********************************************
 // Variables
