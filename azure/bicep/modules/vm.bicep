@@ -1,17 +1,24 @@
 @description('The name of your Virtual Machine.')
 param vmName string
 
+@description('Platform for the Virtual Machine.')
+@allowed([
+  'Linux'
+  'Windows'
+])
+param platform string = 'Linux'
+
 @description('Username for the Virtual Machine.')
 param adminUsername string
 
-@description('Type of authentication to use on the Virtual Machine. SSH key is recommended.')
+@description('Type of authentication to use on the Virtual Machine. SSH key is recommended for Linux, password for Windows.')
 @allowed([
   'sshPublicKey'
   'password'
 ])
-param authenticationType string = 'sshPublicKey'
+param authenticationType string = (platform == 'Linux' ? 'sshPublicKey' : 'password')
 
-@description('SSH Key or password for the Virtual Machine. SSH key is recommended.')
+@description('SSH Key or password for the Virtual Machine. SSH key is recommended for Linux, password for Windows.')
 @secure()
 param adminPasswordOrKey string
 
@@ -24,6 +31,15 @@ param dnsLabelPrefix string = toLower('${vmName}-${uniqueString(resourceGroup().
   'Ubuntu-2204'
 ])
 param ubuntuOSVersion string = 'Ubuntu-2204'
+
+@description('The Windows version for the VM.')
+@allowed([
+  'Windows-2022'
+  'Windows-2019'
+  'Windows-2022-Core'
+  'Windows-2019-Core'
+])
+param windowsOSVersion string = 'Windows-2022'
 
 @description('Location for all resources.')
 param location string = resourceGroup().location
@@ -47,18 +63,47 @@ param networkSecurityGroupName string = 'SecGroupNet'
 ])
 param securityType string = 'TrustedLaunch'
 
+// Image references for Linux and Windows
 var imageReference = {
-  'Ubuntu-2004': {
-    publisher: 'Canonical'
-    offer: '0001-com-ubuntu-server-focal'
-    sku: '20_04-lts-gen2'
-    version: 'latest'
+  Linux: {
+    'Ubuntu-2004': {
+      publisher: 'Canonical'
+      offer: '0001-com-ubuntu-server-focal'
+      sku: '20_04-lts-gen2'
+      version: 'latest'
+    }
+    'Ubuntu-2204': {
+      publisher: 'Canonical'
+      offer: '0001-com-ubuntu-server-jammy'
+      sku: '22_04-lts-gen2'
+      version: 'latest'
+    }
   }
-  'Ubuntu-2204': {
-    publisher: 'Canonical'
-    offer: '0001-com-ubuntu-server-jammy'
-    sku: '22_04-lts-gen2'
-    version: 'latest'
+  Windows: {
+    'Windows-2022': {
+      publisher: 'MicrosoftWindowsServer'
+      offer: 'WindowsServer'
+      sku: '2022-datacenter'
+      version: 'latest'
+    }
+    'Windows-2019': {
+      publisher: 'MicrosoftWindowsServer'
+      offer: 'WindowsServer'
+      sku: '2019-datacenter'
+      version: 'latest'
+    }
+    'Windows-2022-Core': {
+      publisher: 'MicrosoftWindowsServer'
+      offer: 'WindowsServer'
+      sku: '2022-datacenter-core'
+      version: 'latest'
+    }
+    'Windows-2019-Core': {
+      publisher: 'MicrosoftWindowsServer'
+      offer: 'WindowsServer'
+      sku: '2019-datacenter-core'
+      version: 'latest'
+    }
   }
 }
 var publicIPAddressName = '${vmName}PublicIP'
@@ -66,8 +111,10 @@ var networkInterfaceName = '${vmName}NetInt'
 var osDiskType = 'Standard_LRS'
 var subnetAddressPrefix = '10.1.0.0/24'
 var addressPrefix = '10.1.0.0/16'
+
+// Linux configuration
 var linuxConfiguration = {
-  disablePasswordAuthentication: true
+  disablePasswordAuthentication: (authenticationType == 'sshPublicKey')
   ssh: {
     publicKeys: [
       {
@@ -77,6 +124,14 @@ var linuxConfiguration = {
     ]
   }
 }
+
+// Windows configuration
+var windowsConfiguration = {
+  enableAutomaticUpdates: true
+  provisionVMAgent: true
+}
+
+// Security profile
 var securityProfileJson = {
   uefiSettings: {
     secureBootEnabled: true
@@ -165,10 +220,10 @@ resource publicIPAddress 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
   name: publicIPAddressName
   location: location
   sku: {
-    name: 'Basic'
+    name: 'Standard'
   }
   properties: {
-    publicIPAllocationMethod: 'Dynamic'
+    publicIPAllocationMethod: 'Static'
     publicIPAddressVersion: 'IPv4'
     dnsSettings: {
       domainNameLabel: dnsLabelPrefix
@@ -177,7 +232,7 @@ resource publicIPAddress 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
   }
 }
 
-resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
+resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   name: vmName
   location: location
   properties: {
@@ -191,7 +246,9 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
           storageAccountType: osDiskType
         }
       }
-      imageReference: imageReference[ubuntuOSVersion]
+      imageReference: (platform == 'Linux'
+        ? imageReference.Linux[ubuntuOSVersion]
+        : imageReference.Windows[windowsOSVersion])
     }
     networkProfile: {
       networkInterfaces: [
@@ -204,13 +261,18 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
       computerName: vmName
       adminUsername: adminUsername
       adminPassword: adminPasswordOrKey
-      linuxConfiguration: ((authenticationType == 'password') ? null : linuxConfiguration)
+      linuxConfiguration: (platform == 'Linux' && authenticationType == 'sshPublicKey' ? linuxConfiguration : null)
+      windowsConfiguration: (platform == 'Windows' ? windowsConfiguration : null)
     }
     securityProfile: (securityType == 'TrustedLaunch') ? securityProfileJson : null
+    virtualMachineScaleSet: {
+      id: 'string'
+    }
   }
 }
 
-resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = if (securityType == 'TrustedLaunch' && securityProfileJson.uefiSettings.secureBootEnabled && securityProfileJson.uefiSettings.vTpmEnabled) {
+// Only deploy Linux attestation extension for Linux TrustedLaunch VMs
+resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = if (platform == 'Linux' && securityType == 'TrustedLaunch' && securityProfileJson.uefiSettings.secureBootEnabled && securityProfileJson.uefiSettings.vTpmEnabled) {
   parent: vm
   name: extensionName
   location: location
@@ -233,4 +295,6 @@ resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' =
 
 output adminUsername string = adminUsername
 output hostname string = publicIPAddress.properties.dnsSettings.fqdn
-output sshCommand string = 'ssh ${adminUsername}@${publicIPAddress.properties.dnsSettings.fqdn}'
+output sshCommand string = platform == 'Linux'
+  ? 'ssh ${adminUsername}@${publicIPAddress.properties.dnsSettings.fqdn}'
+  : 'RDP to ${publicIPAddress.properties.dnsSettings.fqdn}'
