@@ -16,7 +16,7 @@
 #   --deployment-name <name>     Deployment name (default: bicep-deployment)
 #   --deployment-mode            Deployment mode: incremental or complete (default: incremental)
 #   --delete-rg                  Delete resource group and exit (deploy mode only)
-#   --create-rg                  Create resource group if it doesn't exist (plan mode only)
+#   --create-rg                  Create resource group if it doesn't exist (plan mode only) (deploy creates resource group automatically)
 #   --debug                      Enable debug mode
 #   --help                       Display this help message
 #
@@ -66,7 +66,7 @@ show_help() {
     echo "  --deployment-name <name>     Deployment name (default: bicep-deployment)"
     echo "  --deployment-mode            Deployment mode: incremental or complete (default: incremental)"
     echo "  --delete-rg                  Delete resource group and exit (deploy mode only)"
-    echo "  --create-rg                  Create resource group if it doesn't exist (plan mode only)"
+    echo "  --create-rg                  Create resource group if it doesn't exist (plan mode only) (deploy creates resource group automatically)"
     echo "  --debug                      Enable debug mode"
     echo "  --help                       Display this help message"
     echo ""
@@ -197,7 +197,7 @@ validate_inputs() {
     fi
 
     if [[ "${TYPE}" == "deploy" && "${CREATE_RG_FLAG}" == true ]]; then
-        echo "[ERROR] --create-rg flag is only valid with the deploy type"
+        echo "[ERROR] --create-rg flag is only valid with the plan type"
         exit 1
     fi
 

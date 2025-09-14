@@ -1,197 +1,61 @@
-@description('The name of your Virtual Machine.')
-param vmName string
+@description('Size of VMs in the VM Scale Set.')
+param vmSku string = 'Standard_A1_v2'
 
-@description('Platform for the Virtual Machine.')
+@description('The Windows version for the VM. This will pick a fully patched image of this given Windows version.')
 @allowed([
-  'Linux'
-  'Windows'
+  '2019-Datacenter'
+  '2022-Datacenter'
+  '2019-Datacenter-Core'
+  '2022-Datacenter-Core'
 ])
-param platform string = 'Linux'
+param windowsOSVersion string = '2019-Datacenter'
 
-@description('Username for the Virtual Machine.')
+@description('String used as a base for naming resources. Must be 3-61 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended.')
+@maxLength(61)
+param vmssName string
+
+@description('Number of VM instances (100 or less).')
+@minValue(1)
+@maxValue(100)
+param instanceCount int
+
+@description('Admin username on all VMs.')
 param adminUsername string
 
-@description('Type of authentication to use on the Virtual Machine. SSH key is recommended for Linux, password for Windows.')
-@allowed([
-  'sshPublicKey'
-  'password'
-])
-param authenticationType string = (platform == 'Linux' ? 'sshPublicKey' : 'password')
-
-@description('SSH Key or password for the Virtual Machine. SSH key is recommended for Linux, password for Windows.')
+@description('Admin password on all VMs.')
 @secure()
-param adminPasswordOrKey string
-
-@description('Unique DNS Name for the Public IP used to access the Virtual Machine.')
-param dnsLabelPrefix string = toLower('${vmName}-${uniqueString(resourceGroup().id)}')
-
-@description('The Ubuntu version for the VM. This will pick a fully patched image of this given Ubuntu version.')
-@allowed([
-  'Ubuntu-2004'
-  'Ubuntu-2204'
-])
-param ubuntuOSVersion string = 'Ubuntu-2204'
-
-@description('The Windows version for the VM.')
-@allowed([
-  'Windows-2022'
-  'Windows-2019'
-  'Windows-2022-Core'
-  'Windows-2019-Core'
-])
-param windowsOSVersion string = 'Windows-2022'
+param adminPassword string
 
 @description('Location for all resources.')
 param location string = resourceGroup().location
 
-@description('The size of the VM')
-param vmSize string = 'Standard_D2s_v3'
+var namingInfix = toLower(substring('${vmssName}${uniqueString(resourceGroup().id)}', 0, 9))
+var longNamingInfix = toLower(vmssName)
+var addressPrefix = '10.0.0.0/16'
+var subnetPrefix = '10.0.0.0/24'
 
-@description('Name of the VNET')
-param virtualNetworkName string = 'vNet'
+var virtualNetworkName = '${namingInfix}vnet'
+var publicIPAddressName = '${namingInfix}pip'
+var subnetName = '${namingInfix}subnet'
+var loadBalancerName = '${namingInfix}lb'
+var natPoolName = '${namingInfix}natpool'
+var bePoolName = '${namingInfix}bepool'
 
-@description('Name of the subnet in the virtual network')
-param subnetName string = 'Subnet'
+var natStartPort = 50000
+var natEndPort = 50119
+var natBackendPort = 3389
+var nicName = '${namingInfix}nic'
+var ipConfigName = '${namingInfix}ipconfig'
 
-@description('Name of the Network Security Group')
-param networkSecurityGroupName string = 'SecGroupNet'
-
-@description('Security Type of the Virtual Machine.')
-@allowed([
-  'Standard'
-  'TrustedLaunch'
-])
-param securityType string = 'TrustedLaunch'
-
-// Image references for Linux and Windows
-var imageReference = {
-  Linux: {
-    'Ubuntu-2004': {
-      publisher: 'Canonical'
-      offer: '0001-com-ubuntu-server-focal'
-      sku: '20_04-lts-gen2'
-      version: 'latest'
-    }
-    'Ubuntu-2204': {
-      publisher: 'Canonical'
-      offer: '0001-com-ubuntu-server-jammy'
-      sku: '22_04-lts-gen2'
-      version: 'latest'
-    }
-  }
-  Windows: {
-    'Windows-2022': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2022-datacenter'
-      version: 'latest'
-    }
-    'Windows-2019': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2019-datacenter'
-      version: 'latest'
-    }
-    'Windows-2022-Core': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2022-datacenter-core'
-      version: 'latest'
-    }
-    'Windows-2019-Core': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2019-datacenter-core'
-      version: 'latest'
-    }
-  }
+var osType = {
+  publisher: 'MicrosoftWindowsServer'
+  offer: 'WindowsServer'
+  sku: windowsOSVersion
+  version: 'latest'
 }
-var publicIPAddressName = '${vmName}PublicIP'
-var networkInterfaceName = '${vmName}NetInt'
-var osDiskType = 'Standard_LRS'
-var subnetAddressPrefix = '10.1.0.0/24'
-var addressPrefix = '10.1.0.0/16'
+var imageReference = osType
 
-// Linux configuration
-var linuxConfiguration = {
-  disablePasswordAuthentication: (authenticationType == 'sshPublicKey')
-  ssh: {
-    publicKeys: [
-      {
-        path: '/home/${adminUsername}/.ssh/authorized_keys'
-        keyData: adminPasswordOrKey
-      }
-    ]
-  }
-}
-
-// Windows configuration
-var windowsConfiguration = {
-  enableAutomaticUpdates: true
-  provisionVMAgent: true
-}
-
-// Security profile
-var securityProfileJson = {
-  uefiSettings: {
-    secureBootEnabled: true
-    vTpmEnabled: true
-  }
-  securityType: securityType
-}
-var extensionName = 'GuestAttestation'
-var extensionPublisher = 'Microsoft.Azure.Security.LinuxAttestation'
-var extensionVersion = '1.0'
-var maaTenantName = 'GuestAttestation'
-var maaEndpoint = substring('emptystring', 0, 0)
-
-resource networkInterface 'Microsoft.Network/networkInterfaces@2023-09-01' = {
-  name: networkInterfaceName
-  location: location
-  properties: {
-    ipConfigurations: [
-      {
-        name: 'ipconfig1'
-        properties: {
-          subnet: {
-            id: virtualNetwork.properties.subnets[0].id
-          }
-          privateIPAllocationMethod: 'Dynamic'
-          publicIPAddress: {
-            id: publicIPAddress.id
-          }
-        }
-      }
-    ]
-    networkSecurityGroup: {
-      id: networkSecurityGroup.id
-    }
-  }
-}
-
-resource networkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
-  name: networkSecurityGroupName
-  location: location
-  properties: {
-    securityRules: [
-      {
-        name: 'SSH'
-        properties: {
-          priority: 1000
-          protocol: 'Tcp'
-          access: 'Allow'
-          direction: 'Inbound'
-          sourceAddressPrefix: '*'
-          sourcePortRange: '*'
-          destinationAddressPrefix: '*'
-          destinationPortRange: '22'
-        }
-      }
-    ]
-  }
-}
-
-resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-09-01' = {
+resource virtualNetwork 'Microsoft.Network/virtualNetworks@2021-02-01' = {
   name: virtualNetworkName
   location: location
   properties: {
@@ -204,97 +68,180 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-09-01' = {
       {
         name: subnetName
         properties: {
-          networkSecurityGroup: {
-            id: networkSecurityGroup.id
-          }
-          addressPrefix: subnetAddressPrefix
-          privateEndpointNetworkPolicies: 'Enabled'
-          privateLinkServiceNetworkPolicies: 'Enabled'
+          addressPrefix: subnetPrefix
         }
       }
     ]
   }
 }
 
-resource publicIPAddress 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
+resource publicIP 'Microsoft.Network/publicIPAddresses@2021-02-01' = {
   name: publicIPAddressName
+  location: location
+    sku: {
+      name: 'Standard'
+    }
+    properties: {
+      publicIPAllocationMethod: 'Static'
+      dnsSettings: {
+        domainNameLabel: longNamingInfix
+      }
+    }
+}
+
+resource loadBalancer 'Microsoft.Network/loadBalancers@2021-02-01' = {
+  name: loadBalancerName
   location: location
   sku: {
     name: 'Standard'
   }
   properties: {
-    publicIPAllocationMethod: 'Static'
-    publicIPAddressVersion: 'IPv4'
-    dnsSettings: {
-      domainNameLabel: dnsLabelPrefix
-    }
-    idleTimeoutInMinutes: 4
-  }
-}
-
-resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
-  name: vmName
-  location: location
-  properties: {
-    hardwareProfile: {
-      vmSize: vmSize
-    }
-    storageProfile: {
-      osDisk: {
-        createOption: 'FromImage'
-        managedDisk: {
-          storageAccountType: osDiskType
+    frontendIPConfigurations: [
+      {
+        name: 'LoadBalancerFrontEnd'
+        properties: {
+          publicIPAddress: {
+            id: publicIP.id
+          }
         }
       }
-      imageReference: (platform == 'Linux'
-        ? imageReference.Linux[ubuntuOSVersion]
-        : imageReference.Windows[windowsOSVersion])
-    }
-    networkProfile: {
-      networkInterfaces: [
-        {
-          id: networkInterface.id
+    ]
+    backendAddressPools: [
+      {
+        name: bePoolName
+      }
+    ]
+    inboundNatPools: [
+      {
+        name: natPoolName
+        properties: {
+          frontendIPConfiguration: {
+            id: resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', loadBalancerName, 'loadBalancerFrontEnd')
+          }
+          protocol: 'Tcp'
+          frontendPortRangeStart: natStartPort
+          frontendPortRangeEnd: natEndPort
+          backendPort: natBackendPort
         }
-      ]
-    }
-    osProfile: {
-      computerName: vmName
-      adminUsername: adminUsername
-      adminPassword: adminPasswordOrKey
-      linuxConfiguration: (platform == 'Linux' && authenticationType == 'sshPublicKey' ? linuxConfiguration : null)
-      windowsConfiguration: (platform == 'Windows' ? windowsConfiguration : null)
-    }
-    securityProfile: (securityType == 'TrustedLaunch') ? securityProfileJson : null
-    virtualMachineScaleSet: {
-      id: 'string'
-    }
+      }
+    ]
   }
 }
 
-// Only deploy Linux attestation extension for Linux TrustedLaunch VMs
-resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = if (platform == 'Linux' && securityType == 'TrustedLaunch' && securityProfileJson.uefiSettings.secureBootEnabled && securityProfileJson.uefiSettings.vTpmEnabled) {
-  parent: vm
-  name: extensionName
+resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2021-03-01' = {
+  name: vmssName
   location: location
+  sku: {
+    name: vmSku
+    tier: 'Standard'
+    capacity: instanceCount
+  }
   properties: {
-    publisher: extensionPublisher
-    type: extensionName
-    typeHandlerVersion: extensionVersion
-    autoUpgradeMinorVersion: true
-    enableAutomaticUpgrade: true
-    settings: {
-      AttestationConfig: {
-        MaaSettings: {
-          maaEndpoint: maaEndpoint
-          maaTenantName: maaTenantName
+    overprovision: true
+    upgradePolicy: {
+      mode: 'Manual'
+    }
+    virtualMachineProfile: {
+      storageProfile: {
+        osDisk: {
+          createOption: 'FromImage'
+          caching: 'ReadWrite'
         }
+        imageReference: imageReference
+      }
+      osProfile: {
+        computerNamePrefix: namingInfix
+        adminUsername: adminUsername
+        adminPassword: adminPassword
+      }
+      networkProfile: {
+        networkInterfaceConfigurations: [
+          {
+            name: nicName
+            properties: {
+              primary: true
+              ipConfigurations: [
+                {
+                  name: ipConfigName
+                  properties: {
+                    subnet: {
+                      id: resourceId('Microsoft.Network/virtualNetworks/subnets', virtualNetwork.name, subnetName)
+                    }
+                    loadBalancerBackendAddressPools: [
+                      {
+                        id: resourceId('Microsoft.Network/loadBalancers/backendAddressPools', loadBalancer.name, bePoolName)
+                      }
+                    ]
+                    loadBalancerInboundNatPools: [
+                      {
+                        id: resourceId('Microsoft.Network/loadBalancers/inboundNatPools', loadBalancer.name, natPoolName)
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
       }
     }
   }
 }
 
-output adminUsername string = adminUsername
-output hostname string = publicIPAddress.properties.dnsSettings.fqdn
-output sshCommand string = platform == 'Linux'
-  ? 'ssh ${adminUsername}@${publicIPAddress.properties.dnsSettings.fqdn}'
-  : 'RDP to ${publicIPAddress.properties.dnsSettings.fqdn}'
+resource autoScaleSettings 'microsoft.insights/autoscalesettings@2015-04-01' = {
+  name: 'cpuautoscale'
+  location: location
+  properties: {
+    name: 'cpuautoscale'
+    targetResourceUri: vmss.id
+    enabled: true
+    profiles: [
+      {
+        name: 'Profile1'
+        capacity: {
+          minimum: '1'
+          maximum: '10'
+          default: '1'
+        }
+        rules: [
+          {
+            metricTrigger: {
+              metricName: 'Percentage CPU'
+              metricResourceUri: vmss.id
+              timeGrain: 'PT1M'
+              timeWindow: 'PT5M'
+              timeAggregation: 'Average'
+              operator: 'GreaterThan'
+              threshold: 50
+              statistic: 'Average'
+            }
+            scaleAction: {
+              direction: 'Increase'
+              type: 'ChangeCount'
+              value: '1'
+              cooldown: 'PT5M'
+            }
+          }
+          {
+            metricTrigger: {
+              metricName: 'Percentage CPU'
+              metricResourceUri: vmss.id
+              timeGrain: 'PT1M'
+              timeWindow: 'PT5M'
+              timeAggregation: 'Average'
+              operator: 'LessThan'
+              threshold: 30
+              statistic: 'Average'
+            }
+            scaleAction: {
+              direction: 'Decrease'
+              type: 'ChangeCount'
+              value: '1'
+              cooldown: 'PT5M'
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
