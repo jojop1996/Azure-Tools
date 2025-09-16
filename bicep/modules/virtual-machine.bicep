@@ -32,24 +32,6 @@ param adminPasswordOrKey string
 @description('Unique DNS Name for the Public IP used to access the VM(s).')
 param dnsLabelPrefix string = toLower(take('${vmName}-${uniqueString(resourceGroup().id)}', 63))
 
-@description('The Ubuntu version for the VM(s).')
-@allowed([
-  'Ubuntu-2004'
-  'Ubuntu-2204'
-])
-param ubuntuOSVersion string = 'Ubuntu-2204'
-
-@description('The Windows version for the VM(s).')
-@allowed([
-  '2019-Datacenter'
-  '2022-Datacenter'
-  '2019-Datacenter-Core'
-  '2022-Datacenter-Core'
-  '2019-Datacenter-Gen2'
-  '2022-Datacenter-Gen2'
-])
-param windowsOSVersion string = '2022-Datacenter-Gen2'
-
 @description('Location for all resources.')
 param location string = resourceGroup().location
 
@@ -110,59 +92,23 @@ param networkSecurityGroupName string = 'SecGroupNet'
 ])
 param securityType string = 'TrustedLaunch'
 
+@description('Publisher of the image.')
+param imagePublisher string
+
+@description('Offer of the image.')
+param imageOffer string
+
+@description('SKU of the image.')
+param imageSku string
+
+@description('Version of the image.')
+param imageVersion string = 'latest'
+
 var imageReference = {
-  Linux: {
-    'Ubuntu-2004': {
-      publisher: 'Canonical'
-      offer: '0001-com-ubuntu-server-focal'
-      sku: '20_04-lts-gen2'
-      version: 'latest'
-    }
-    'Ubuntu-2204': {
-      publisher: 'Canonical'
-      offer: '0001-com-ubuntu-server-jammy'
-      sku: '22_04-lts-gen2'
-      version: 'latest'
-    }
-  }
-  Windows: {
-    '2019-Datacenter': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2019-datacenter'
-      version: 'latest'
-    }
-    '2022-Datacenter': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2022-datacenter'
-      version: 'latest'
-    }
-    '2019-Datacenter-Core': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2019-datacenter-core'
-      version: 'latest'
-    }
-    '2022-Datacenter-Core': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2022-datacenter-core'
-      version: 'latest'
-    }
-    '2019-Datacenter-Gen2': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2019-datacenter-g2'
-      version: 'latest'
-    }
-    '2022-Datacenter-Gen2': {
-      publisher: 'MicrosoftWindowsServer'
-      offer: 'WindowsServer'
-      sku: '2022-datacenter-g2'
-      version: 'latest'
-    }
-  }
+  publisher: imagePublisher
+  offer: imageOffer
+  sku: imageSku
+  version: imageVersion
 }
 
 var publicIPAddressName = '${vmName}PublicIP'
@@ -332,9 +278,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = if (deploymentType 
           storageAccountType: osDiskType
         }
       }
-      imageReference: (platform == 'Linux'
-        ? imageReference.Linux[ubuntuOSVersion]
-        : imageReference.Windows[windowsOSVersion])
+      imageReference: imageReference
     }
     networkProfile: {
       networkInterfaces: [
@@ -406,9 +350,7 @@ resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-07-01' = if (deplo
           createOption: 'FromImage'
           caching: 'ReadWrite'
         }
-        imageReference: (platform == 'Linux'
-          ? imageReference.Linux[ubuntuOSVersion]
-          : imageReference.Windows[windowsOSVersion])
+        imageReference: imageReference
       }
       osProfile: {
         computerNamePrefix: vmName
