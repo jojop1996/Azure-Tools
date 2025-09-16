@@ -1,0 +1,8 @@
+notes
+temp/
+.terraform*
+*.tfstate
+*.tfvars*
+venv/
+__pycache__/
+*.log

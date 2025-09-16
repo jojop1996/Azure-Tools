@@ -1,0 +1,1 @@
+# Destroy scripts module for Azure service principal cleanup
