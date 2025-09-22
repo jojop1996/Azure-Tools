@@ -1,1 +1,0 @@
-# Create scripts module for Azure service principal setup
