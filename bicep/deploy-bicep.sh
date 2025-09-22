@@ -149,10 +149,6 @@ parse_arguments() {
             show_help
             exit 0
             ;;
-        --debug)
-            DEBUG_FLAG=true
-            shift
-            ;;
         *)
             echo "[ERROR] Unknown argument: $1"
             exit 1
@@ -307,45 +303,38 @@ handle_resource_group() {
     echo "---------------------------------------"
     echo "|    Resource Group Configuration     |"
     echo "---------------------------------------"
-    echo ""
 
-    if az group show --name "${RESOURCE_GROUP_NAME}" ${DEBUG_FLAG:+--debug} 2>/dev/null; then
-        if [[ "${TYPE}" == "deploy" ]]; then
-            if [[ "${DELETE_RG_FLAG}" == true ]]; then
-                echo ""
-                echo "Deleting Resource Group"
-                echo "---------------------------------------"
-                echo ""
+    # Source the Azure Resource Group module
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "${SCRIPT_DIR}/../scripts/azure-resource-group.sh"
 
-                az group delete \
-                    --name "${RESOURCE_GROUP_NAME}" \
-                    --yes \
-                    ${DEBUG_FLAG:+--debug}
+    # Handle resource group based on operation type
+    if [[ "${TYPE}" == "deploy" ]]; then
+        if [[ "${DELETE_RG_FLAG}" == true ]]; then
+            # Delete resource group and exit
+            echo ""
+            echo "Deleting Resource Group"
+            echo "---------------------------------------"
 
-                echo "[INFO] Resource Group Deleted."
-                echo ""
+            azure_resource_group --action delete --resource-group-name "${RESOURCE_GROUP_NAME}" --yes
+            echo ""
+            exit 0
+        else
+            # For deployment, we always ensure the resource group exists
+            azure_resource_group --action create --resource-group-name "${RESOURCE_GROUP_NAME}" --location "${LOCATION}"
+        fi
+    else
+        # For plan mode
+        if [[ "${CREATE_RG_FLAG}" == true ]]; then
+            # Create resource group if requested
+            azure_resource_group --action create --resource-group-name "${RESOURCE_GROUP_NAME}" --location "${LOCATION}"
+        else
+            # Just check if resource group exists
+            if ! azure_resource_group --action check --resource-group-name "${RESOURCE_GROUP_NAME}"; then
+                echo "[INFO] Use --create-rg flag to create it automatically."
                 exit 0
             fi
         fi
-    else
-        if [[ "${TYPE}" == "plan" && "${CREATE_RG_FLAG}" != true ]]; then
-            echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' does not exist."
-            echo "[INFO] Use --create-rg flag to create it automatically."
-            exit 0
-        fi
-
-        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' does not exist."
-        echo ""
-        echo "Creating Resource Group"
-        echo "---------------------------------------"
-        echo ""
-        az group create \
-            --name "${RESOURCE_GROUP_NAME}" \
-            --location "${LOCATION}" \
-            ${DEBUG_FLAG:+--debug}
-
-        echo ""
-        echo "[INFO] Resource group created."
     fi
 
     echo ""
@@ -365,8 +354,7 @@ execute_deployment_plan() {
         --resource-group "${RESOURCE_GROUP_NAME}" \
         --mode "${DEPLOYMENT_MODE}" \
         ${TEMPLATE_FILE:+--template-file "${TEMPLATE_FILE}"} \
-        ${PARAM_ARGS} \
-        ${DEBUG_FLAG:+--debug}
+        ${PARAM_ARGS}
 
     echo ""
     echo "---------------------------------------"
@@ -390,8 +378,7 @@ execute_deployment() {
         --resource-group "${RESOURCE_GROUP_NAME}" \
         --mode "${DEPLOYMENT_MODE}" \
         ${TEMPLATE_FILE:+--template-file "${TEMPLATE_FILE}"} \
-        ${PARAM_ARGS} \
-        ${DEBUG_FLAG:+--debug}
+        ${PARAM_ARGS}
 
     echo ""
     echo "---------------------------------------"
@@ -430,7 +417,7 @@ main() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     source "${SCRIPT_DIR}/../scripts/azure-cli-login.sh"
 
-    azure_cli_login --client-id "${CLIENT_ID}" --client-secret "${CLIENT_SECRET}" --tenant-id "${TENANT_ID}" --subscription-id "${SUBSCRIPTION_ID}" ${DEBUG_FLAG:+--debug}
+    azure_cli_login --client-id "${CLIENT_ID}" --client-secret "${CLIENT_SECRET}" --tenant-id "${TENANT_ID}" --subscription-id "${SUBSCRIPTION_ID}"
 
     # Handle resource group operations
     handle_resource_group
