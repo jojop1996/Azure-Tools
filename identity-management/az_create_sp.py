@@ -91,10 +91,10 @@ async def async_main():
         print_status("SETUP PROCESS COMPLETED", "header")
         print_status("Your CI/CD Environment Variables:", "section")
         print("-" * 50)
-        print_status(f"AZURE_CLIENT_ID       = {app_id}")
-        print_status(f"AZURE_CLIENT_SECRET   = {client_secret_value}")
-        print_status(f"AZURE_TENANT_ID       = {az_tenant_id}")
-        print_status(f"AZURE_SUBSCRIPTION_ID = {az_subscription}")
+        print_status(f"export AZURE_CLIENT_ID={app_id}")
+        print_status(f"export AZURE_CLIENT_SECRET={client_secret_value}")
+        print_status(f"export AZURE_TENANT_ID={az_tenant_id}")
+        print_status(f"export AZURE_SUBSCRIPTION_ID={az_subscription}")
         print("-" * 50)
             
     except Exception as e:

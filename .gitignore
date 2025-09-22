@@ -1,2 +1,7 @@
 .vscode/
 .DS_Store
+venv/
+.venv/
+__pycache__/
+*.log
+temp/
