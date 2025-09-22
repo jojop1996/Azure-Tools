@@ -6,214 +6,259 @@
 # authentication status, and performing service principal login.
 ######################################
 
-# Function to check if Azure CLI is installed
-check_azure_login_installed() {
-  if ! command -v az &>/dev/null; then
-    echo "[ERROR] Azure CLI is not installed"
-    exit 1
-  fi
+############### USAGE ################
+# ./azure-cli-login-new.sh [options]
+# Options:
+#   --client-id <id>             Azure Client ID
+#   --client-secret <secret>     Azure Client Secret
+#   --tenant-id <id>             Azure Tenant ID
+#   --subscription-id <id>       Azure Subscription ID (optional)
+#   --force-login                Force re-authentication even if already logged in
+#   --debug                      Enable debug mode
+#   --help                       Display this help message
+#
+# Examples:
+#   ./azure-cli-login-new.sh --client-id "xxx" --client-secret "xxx" --tenant-id "xxx"
+#   ./azure-cli-login-new.sh --client-id "xxx" --client-secret "xxx" --tenant-id "xxx" --subscription-id "xxx"
+#   ./azure-cli-login-new.sh --force-login --client-id "xxx" --client-secret "xxx" --tenant-id "xxx"
+######################################
 
-  echo "[INFO] Azure CLI is installed"
-  return 0
+######### VARIABLE HIERARCHY #########
+# 1. Command line arguments (highest priority)
+# 2. Environment variables (fallback)
+# 3. Default values (lowest priority, where applicable)
+#
+# Required variables (no defaults):
+# - CLIENT_ID
+# - CLIENT_SECRET
+# - TENANT_ID
+######################################
+
+# Function to check if Azure CLI is installed
+check_azure_cli_installed() {
+    if ! command -v az &>/dev/null; then
+        echo "[ERROR] Azure CLI is not installed"
+        exit 1
+    fi
+
+    echo "[INFO] Azure CLI is installed"
+    return 0
 }
 
 # Function to check if already authenticated with Azure CLI
-check_azure_login_authenticated() {
-  if az account show &>/dev/null; then
-    local current_account=$(az account show --query name -o tsv 2>/dev/null)
-    echo "[INFO] Already authenticated to Azure CLI"
-    echo "[INFO] Current account: ${current_account:-Unknown}"
-    return 0
-  else
-    echo "[INFO] Not currently authenticated to Azure CLI"
-    return 1
-  fi
+check_azure_cli_authenticated() {
+    if az account show &>/dev/null; then
+        local current_account=$(az account show --query name -o tsv 2>/dev/null)
+        echo "[INFO] Already authenticated to Azure CLI"
+        echo "[INFO] Current account: ${current_account:-Unknown}"
+        return 0
+    else
+        echo "[INFO] Not currently authenticated to Azure CLI"
+        return 1
+    fi
 }
 
 # Function to perform Azure CLI service principal login
-execute_azure_cli_login() {
-  local client_id=""
-  local client_secret=""
-  local tenant_id=""
-  local debug_flag=""
-
-  while [[ $# -gt 0 ]]; do
-    case $1 in
-    --client-id)
-      client_id="$2"
-      shift 2
-      ;;
-    --client-secret)
-      client_secret="$2"
-      shift 2
-      ;;
-    --tenant-id)
-      tenant_id="$2"
-      shift 2
-      ;;
-    --debug)
-      debug_flag=true
-      shift
-      ;;
-    *)
-      echo "Unknown argument: $1"
-      return 1
-      ;;
-    esac
-  done
-
-  if [ -z "${client_id}" ] || [ -z "${client_secret}" ] || [ -z "${tenant_id}" ]; then
-    echo "[ERROR] Azure service principal credentials are required"
-    echo "[INFO] Provide client_id, client_secret, and tenant_id"
-    return 1
-  fi
-
-  echo "[INFO] Authenticating with Azure CLI using service principal..."
-  echo ""
-
-  # Login using service principal
-  if az login --service-principal \
-    --username "${client_id}" \
-    --password "${client_secret}" \
-    --tenant "${tenant_id}" \
-    ${debug_flag:+--debug}; then
+login_to_azure() {
+    echo "[INFO] Authenticating with Azure CLI using service principal..."
     echo ""
-    echo "[INFO] Authenticated to Azure CLI"
-    return 0
-  else
-    echo ""
-    echo "[ERROR] Failed to authenticate with Azure CLI"
-    exit 1
-  fi
+
+    if az login --service-principal \
+        --username "${CLIENT_ID}" \
+        --password "${CLIENT_SECRET}" \
+        --tenant "${TENANT_ID}" \
+        ${DEBUG_FLAG:+--debug}; then
+        echo ""
+        echo "[INFO] Authenticated to Azure CLI"
+        return 0
+    else
+        echo ""
+        echo "[ERROR] Failed to authenticate with Azure CLI"
+        exit 1
+    fi
 }
 
 # Function to set Azure subscription
-set_azure_subscription() {
-  local subscription_id=""
-  local debug_flag=""
+set_subscription() {
+    echo "[INFO] Setting Azure subscription: ${SUBSCRIPTION_ID}"
 
-  while [[ $# -gt 0 ]]; do
-    case $1 in
-    --subscription-id)
-      subscription_id="$2"
-      shift 2
-      ;;
-    --debug)
-      debug_flag=true
-      shift
-      ;;
-    *)
-      echo "Unknown argument: $1"
-      return 1
-      ;;
-    esac
-  done
-
-  if [ -z "${subscription_id}" ]; then
-    echo "[ERROR] Subscription ID is required"
-    return 1
-  fi
-
-  echo "[INFO] Setting Azure subscription: ${subscription_id}"
-
-  if az account set \
-    --subscription "${subscription_id}" \
-    ${debug_flag:+--debug}; then
-    echo "[INFO] Azure subscription set"
-    return 0
-  else
-    echo "[ERROR] Failed to set Azure subscription"
-    return 1
-  fi
+    if az account set \
+        --subscription "${SUBSCRIPTION_ID}" \
+        ${DEBUG_FLAG:+--debug}; then
+        echo "[INFO] Azure subscription set"
+        return 0
+    else
+        echo "[ERROR] Failed to set Azure subscription"
+        return 1
+    fi
 }
 
-# Main function that combines all checks and authentication
+# Function to display help message
+show_help() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Options:"
+    echo "  --client-id <id>             Azure Client ID"
+    echo "  --client-secret <secret>     Azure Client Secret"
+    echo "  --tenant-id <id>             Azure Tenant ID"
+    echo "  --subscription-id <id>       Azure Subscription ID (optional)"
+    echo "  --force-login                Force re-authentication even if already logged in"
+    echo "  --debug                      Enable debug mode"
+    echo "  --help                       Display this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 --client-id \"xxx\" --client-secret \"xxx\" --tenant-id \"xxx\""
+    echo "  $0 --client-id \"xxx\" --client-secret \"xxx\" --tenant-id \"xxx\" --subscription-id \"xxx\""
+    echo "  $0 --force-login --client-id \"xxx\" --client-secret \"xxx\" --tenant-id \"xxx\""
+    echo ""
+    echo "Environment Variables:"
+    echo "  AZURE_CLIENT_ID              Alternative to --client-id"
+    echo "  AZURE_CLIENT_SECRET          Alternative to --client-secret"
+    echo "  AZURE_TENANT_ID              Alternative to --tenant-id"
+    echo "  AZURE_SUBSCRIPTION_ID        Alternative to --subscription-id"
+}
+
+# Function to parse command line arguments
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+        --client-id)
+            ARG_CLIENT_ID="$2"
+            shift 2
+            ;;
+        --client-secret)
+            ARG_CLIENT_SECRET="$2"
+            shift 2
+            ;;
+        --tenant-id)
+            ARG_TENANT_ID="$2"
+            shift 2
+            ;;
+        --subscription-id)
+            ARG_SUBSCRIPTION_ID="$2"
+            shift 2
+            ;;
+        --force-login)
+            FORCE_LOGIN_FLAG=true
+            shift
+            ;;
+        --debug)
+            DEBUG_FLAG=true
+            shift
+            ;;
+        --help)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "[ERROR] Unknown argument: $1"
+            exit 1
+            ;;
+        esac
+    done
+}
+
+# Function to set variables with hierarchy
+set_variables() {
+    # Required variables
+    CLIENT_ID="${ARG_CLIENT_ID:-${AZURE_CLIENT_ID}}"
+    CLIENT_SECRET="${ARG_CLIENT_SECRET:-${AZURE_CLIENT_SECRET}}"
+    TENANT_ID="${ARG_TENANT_ID:-${AZURE_TENANT_ID}}"
+    
+    # Optional variables
+    SUBSCRIPTION_ID="${ARG_SUBSCRIPTION_ID:-${AZURE_SUBSCRIPTION_ID}}"
+    FORCE_LOGIN="${FORCE_LOGIN_FLAG:-false}"
+}
+
+# Function to validate inputs
+validate_inputs() {
+    if [ -z "${CLIENT_ID}" ]; then
+        echo "[ERROR] CLIENT_ID is required (provide via --client-id or AZURE_CLIENT_ID environment variable)"
+        exit 1
+    fi
+
+    if [ -z "${CLIENT_SECRET}" ]; then
+        echo "[ERROR] CLIENT_SECRET is required (provide via --client-secret or AZURE_CLIENT_SECRET environment variable)"
+        exit 1
+    fi
+
+    if [ -z "${TENANT_ID}" ]; then
+        echo "[ERROR] TENANT_ID is required (provide via --tenant-id or AZURE_TENANT_ID environment variable)"
+        exit 1
+    fi
+}
+
+# Function to display configuration
+display_configuration() {
+    echo ""
+    echo "Azure CLI Login Configuration"
+    echo "---------------------------------------"
+    echo ""
+    echo "[INFO] CLIENT_ID: ${CLIENT_ID}"
+    echo "[INFO] TENANT_ID: ${TENANT_ID}"
+    
+    if [ ! -z "${SUBSCRIPTION_ID}" ]; then
+        echo "[INFO] SUBSCRIPTION_ID: ${SUBSCRIPTION_ID}"
+    fi
+    
+    if [ "${FORCE_LOGIN}" = true ]; then
+        echo "[INFO] FORCE_LOGIN: true"
+    fi
+    echo ""
+}
+
+# Function to handle authentication logic
+handle_authentication() {
+    echo "Azure Login"
+    echo "---------------------------------------"
+    echo ""
+
+    # Check if Azure CLI is installed
+    check_azure_cli_installed
+
+    # Check if already authenticated (unless force_login is true)
+    if [ "${FORCE_LOGIN}" != "true" ] && check_azure_cli_authenticated; then
+        # If subscription_id is provided, ensure we're using the right subscription
+        if [ ! -z "${SUBSCRIPTION_ID}" ]; then
+            local current_subscription=$(az account show --query id -o tsv 2>/dev/null)
+            if [ "${current_subscription}" != "${SUBSCRIPTION_ID}" ]; then
+                echo "[INFO] Switching to target subscription..."
+                set_subscription
+            else
+                echo "[INFO] Already using target subscription"
+            fi
+        fi
+        return 0
+    fi
+
+    # Perform authentication
+    login_to_azure
+
+    # Set subscription if provided
+    if [ ! -z "${SUBSCRIPTION_ID}" ]; then
+        set_subscription
+    fi
+}
+
+# Main execution function
 azure_cli_login() {
-  while [[ $# -gt 0 ]]; do
-    case $1 in
-    --client-id)
-      local client_id="$2"
-      shift 2
-      ;;
-    --client-secret)
-      local client_secret="$2"
-      shift 2
-      ;;
-    --tenant-id)
-      local tenant_id="$2"
-      shift 2
-      ;;
-    --subscription-id)
-      local subscription_id="$2"
-      shift 2
-      ;;
-    --force-login)
-      local force_login="${2:-false}"
-      shift 2
-      ;;
-    --debug)
-      local debug_flag=true
-      shift
-      ;;
-    *)
-      echo "Unknown argument: $1"
-      exit 1
-      ;;
-    esac
-  done
+    # Parse command line arguments
+    parse_arguments "$@"
 
-  echo "Azure Login"
-  echo "---------------------------------------"
-  echo ""
+    # Set variables with hierarchy
+    set_variables
 
-  # Check if Azure CLI is installed
-  if ! check_azure_login_installed; then
-    return 1
-  fi
+    # Validate inputs
+    validate_inputs
 
-  # Check if already authenticated (unless force_login is true)
-  if [ "${force_login}" != "true" ] && check_azure_login_authenticated; then
-    # If subscription_id is provided, ensure we're using the right subscription
-    if [ ! -z "${subscription_id}" ]; then
-      local current_subscription=$(az account show --query id -o tsv 2>/dev/null)
-      if [ "${current_subscription}" != "${subscription_id}" ]; then
-        echo "[INFO] Switching to target subscription..."
-        set_azure_subscription --subscription-id "${subscription_id}" ${debug_flag:+--debug}
-      else
-        echo "[INFO] Already using target subscription"
-      fi
-    fi
-    return 0
-  fi
+    # Display configuration
+    display_configuration
 
-  # Perform authentication
-  if ! execute_azure_cli_login --client-id "${client_id}" --client-secret "${client_secret}" --tenant-id "${tenant_id}" ${debug_flag:+--debug}; then
-    return 1
-  fi
-
-  # Set subscription if provided
-  if [ ! -z "${subscription_id}" ]; then
-    if ! set_azure_subscription --subscription-id "${subscription_id}" ${debug_flag:+--debug}; then
-      return 1
-    fi
-  fi
-
-  return 0
+    # Handle authentication
+    handle_authentication
 }
 
-# If script is run directly (not sourced), show usage
+# If script is run directly (not sourced), execute main function
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  echo "Azure CLI Login Module"
-  echo "Usage: source azure-cli-login.sh"
-  echo ""
-  echo "Available functions:"
-  echo "  check_azure_login_installed         - Check if Azure CLI is installed"
-  echo "  check_azure_login_authenticated     - Check if already authenticated"
-  echo "  execute_azure_cli_login --client-id <id> --client-secret <secret> --tenant-id <tenant> [--debug] - Perform service principal login"
-  echo "  set_azure_subscription --subscription-id <sub_id> [--debug] - Set Azure subscription"
-  echo "  azure_cli_login --client-id <id> --client-secret <secret> --tenant-id <tenant> [--subscription-id <sub_id>] [--debug] [--force-login <true|false>] - Complete check and auth"
-  echo ""
-  echo "Example:"
-  echo "  source azure-cli-login.sh"
-  echo "  azure_cli_login --client-id \"\${CLIENT_ID}\" --client-secret \"\${CLIENT_SECRET}\" --tenant-id \"\${TENANT_ID}\" --subscription-id \"\${SUBSCRIPTION_ID}\" --debug"
+    azure_cli_login "$@"
 fi
