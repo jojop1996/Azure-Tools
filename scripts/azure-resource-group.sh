@@ -33,6 +33,9 @@
 # - ACTION
 ######################################
 
+# Set default outputs
+DEBUG_OUT="/dev/stdout"
+DEBUG_ARG=""
 
 # Function to display help message
 show_help() {
@@ -83,7 +86,7 @@ parse_arguments() {
             shift
             ;;
         --debug)
-            DEBUG_FLAG=true
+            DEBUG_ARG="--debug"
             shift
             ;;
         --help)
@@ -159,11 +162,14 @@ display_configuration() {
 # Function to check if a resource group exists
 check_resource_group() {
     echo "[INFO] Checking if resource group '${RESOURCE_GROUP_NAME}' exists..."
+    echo ""
 
-    if az group show --name "${RESOURCE_GROUP_NAME}" &>/dev/null; then
+    if az group show --name "${RESOURCE_GROUP_NAME}" ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
+    echo ""
         echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' exists."
         return 0
     else
+    echo ""
         echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' does not exist."
         return 1
     fi
@@ -177,7 +183,7 @@ create_resource_group() {
         --name "${RESOURCE_GROUP_NAME}" \
         --location "${LOCATION}" \
         ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} \
-        ${DEBUG_FLAG:+--debug}; then
+        $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
         echo ""
         echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' created successfully."
         return 0
@@ -201,7 +207,7 @@ delete_resource_group() {
         --name "${RESOURCE_GROUP_NAME}" \
         ${confirm_flag} \
         ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} \
-        ${DEBUG_FLAG:+--debug}; then
+        $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
 
         echo ""
         echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' deleted successfully."

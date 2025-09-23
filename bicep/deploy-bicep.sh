@@ -145,6 +145,10 @@ parse_arguments() {
             CREATE_RG_FLAG=true
             shift
             ;;
+        --debug)
+            DEBUG_FLAG=true
+            shift
+            ;;
         --help)
             show_help
             exit 0
@@ -316,21 +320,21 @@ handle_resource_group() {
             echo "Deleting Resource Group"
             echo "---------------------------------------"
 
-            azure_resource_group --action delete --resource-group-name "${RESOURCE_GROUP_NAME}" --yes
+            azure_resource_group --action delete --resource-group-name "${RESOURCE_GROUP_NAME}" --yes ${DEBUG_FLAG:+--debug}
             echo ""
             exit 0
         else
             # For deployment, we always ensure the resource group exists
-            azure_resource_group --action create --resource-group-name "${RESOURCE_GROUP_NAME}" --location "${LOCATION}"
+            azure_resource_group --action create --resource-group-name "${RESOURCE_GROUP_NAME}" --location "${LOCATION}" ${DEBUG_FLAG:+--debug}
         fi
     else
         # For plan mode
         if [[ "${CREATE_RG_FLAG}" == true ]]; then
             # Create resource group if requested
-            azure_resource_group --action create --resource-group-name "${RESOURCE_GROUP_NAME}" --location "${LOCATION}"
+            azure_resource_group --action create --resource-group-name "${RESOURCE_GROUP_NAME}" --location "${LOCATION}" ${DEBUG_FLAG:+--debug}
         else
             # Just check if resource group exists
-            if ! azure_resource_group --action check --resource-group-name "${RESOURCE_GROUP_NAME}"; then
+            if ! azure_resource_group --action check --resource-group-name "${RESOURCE_GROUP_NAME}" ${DEBUG_FLAG:+--debug}; then
                 echo "[INFO] Use --create-rg flag to create it automatically."
                 exit 0
             fi
@@ -354,7 +358,8 @@ execute_deployment_plan() {
         --resource-group "${RESOURCE_GROUP_NAME}" \
         --mode "${DEPLOYMENT_MODE}" \
         ${TEMPLATE_FILE:+--template-file "${TEMPLATE_FILE}"} \
-        ${PARAM_ARGS}
+        ${PARAM_ARGS} \
+        ${DEBUG_FLAG:+--debug}
 
     echo ""
     echo "---------------------------------------"
@@ -378,7 +383,8 @@ execute_deployment() {
         --resource-group "${RESOURCE_GROUP_NAME}" \
         --mode "${DEPLOYMENT_MODE}" \
         ${TEMPLATE_FILE:+--template-file "${TEMPLATE_FILE}"} \
-        ${PARAM_ARGS}
+        ${PARAM_ARGS} \
+        ${DEBUG_FLAG:+--debug}
 
     echo ""
     echo "---------------------------------------"
@@ -417,7 +423,7 @@ main() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     source "${SCRIPT_DIR}/../scripts/azure-cli-login.sh"
 
-    azure_cli_login --client-id "${CLIENT_ID}" --client-secret "${CLIENT_SECRET}" --tenant-id "${TENANT_ID}" --subscription-id "${SUBSCRIPTION_ID}"
+    azure_cli_login --client-id "${CLIENT_ID}" --client-secret "${CLIENT_SECRET}" --tenant-id "${TENANT_ID}" --subscription-id "${SUBSCRIPTION_ID}" ${DEBUG_FLAG:+--debug}
 
     # Handle resource group operations
     handle_resource_group

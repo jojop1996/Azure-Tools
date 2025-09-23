@@ -34,64 +34,9 @@
 # - TENANT_ID
 ######################################
 
-# Function to check if Azure CLI is installed
-check_azure_cli_installed() {
-    if ! command -v az &>/dev/null; then
-        echo "[ERROR] Azure CLI is not installed"
-        exit 1
-    fi
-
-    echo "[INFO] Azure CLI is installed"
-    return 0
-}
-
-# Function to check if already authenticated with Azure CLI
-check_azure_cli_authenticated() {
-    if az account show &>/dev/null; then
-        local current_account=$(az account show --query name -o tsv 2>/dev/null)
-        echo "[INFO] Already authenticated to Azure CLI"
-        echo "[INFO] Current account: ${current_account:-Unknown}"
-        return 0
-    else
-        echo "[INFO] Not currently authenticated to Azure CLI"
-        return 1
-    fi
-}
-
-# Function to perform Azure CLI service principal login
-login_to_azure() {
-    echo "[INFO] Authenticating with Azure CLI using service principal..."
-    echo ""
-
-    if az login --service-principal \
-        --username "${CLIENT_ID}" \
-        --password "${CLIENT_SECRET}" \
-        --tenant "${TENANT_ID}" \
-        ${DEBUG_FLAG:+--debug}; then
-        echo ""
-        echo "[INFO] Authenticated to Azure CLI"
-        return 0
-    else
-        echo ""
-        echo "[ERROR] Failed to authenticate with Azure CLI"
-        exit 1
-    fi
-}
-
-# Function to set Azure subscription
-set_subscription() {
-    echo "[INFO] Setting Azure subscription: ${SUBSCRIPTION_ID}"
-
-    if az account set \
-        --subscription "${SUBSCRIPTION_ID}" \
-        ${DEBUG_FLAG:+--debug}; then
-        echo "[INFO] Azure subscription set"
-        return 0
-    else
-        echo "[ERROR] Failed to set Azure subscription"
-        return 1
-    fi
-}
+# Set default outputs
+DEBUG_OUT="/dev/stdout"
+DEBUG_ARG=""
 
 # Function to display help message
 show_help() {
@@ -143,7 +88,7 @@ parse_arguments() {
             shift
             ;;
         --debug)
-            DEBUG_FLAG=true
+            DEBUG_ARG="--debug"
             shift
             ;;
         --help)
@@ -207,6 +152,65 @@ display_configuration() {
     echo ""
 }
 
+# Function to check if Azure CLI is installed
+check_azure_cli_installed() {
+    if ! command -v az &>/dev/null; then
+        echo "[ERROR] Azure CLI is not installed"
+        exit 1
+    fi
+
+    echo "[INFO] Azure CLI is installed"
+    return 0
+}
+
+# Function to check if already authenticated with Azure CLI
+check_azure_cli_authenticated() {
+    if az account show $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
+        local current_account=$(az account show --query name -o tsv $DEBUG_ARG >"$DEBUG_OUT" 2>&1)
+        echo "[INFO] Already authenticated to Azure CLI"
+        echo "[INFO] Current account: ${current_account:-Unknown}"
+        return 0
+    else
+        echo "[INFO] Not currently authenticated to Azure CLI"
+        return 1
+    fi
+}
+
+# Function to perform Azure CLI service principal login
+login_to_azure() {
+    echo "[INFO] Authenticating with Azure CLI using service principal..."
+    echo ""
+
+    if az login --service-principal \
+        --username "${CLIENT_ID}" \
+        --password "${CLIENT_SECRET}" \
+        --tenant "${TENANT_ID}" \
+        $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
+        echo ""
+        echo "[INFO] Authenticated to Azure CLI"
+        return 0
+    else
+        echo ""
+        echo "[ERROR] Failed to authenticate with Azure CLI"
+        exit 1
+    fi
+}
+
+# Function to set Azure subscription
+set_subscription() {
+    echo "[INFO] Setting Azure subscription: ${SUBSCRIPTION_ID}"
+
+    if az account set \
+        --subscription "${SUBSCRIPTION_ID}" \
+        $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
+        echo "[INFO] Azure subscription set"
+        return 0
+    else
+        echo "[ERROR] Failed to set Azure subscription"
+        return 1
+    fi
+}
+
 # Function to handle authentication logic
 handle_authentication() {
     echo "Azure Login"
@@ -220,7 +224,7 @@ handle_authentication() {
     if [ "${FORCE_LOGIN}" != "true" ] && check_azure_cli_authenticated; then
         # If subscription_id is provided, ensure we're using the right subscription
         if [ ! -z "${SUBSCRIPTION_ID}" ]; then
-            local current_subscription=$(az account show --query id -o tsv 2>/dev/null)
+            local current_subscription=$(az account show --query id -o tsv $DEBUG_ARG >"$DEBUG_OUT" 2>&1)
             if [ "${current_subscription}" != "${SUBSCRIPTION_ID}" ]; then
                 echo "[INFO] Switching to target subscription..."
                 set_subscription
