@@ -9,9 +9,9 @@
 ############### USAGE ################
 # ./azure-resource-group.sh [options]
 # Options:
+#   --action <action>            Action to perform: check, create, delete (required)
 #   --resource-group-name <name> Resource group name (required)
 #   --location <location>        Azure region (default: eastus)
-#   --action <action>            Action to perform: check, create, delete (required)
 #   --subscription-id <id>       Azure Subscription ID (optional)
 #   --yes                        Skip confirmation for delete operation
 #   --debug                      Enable debug mode
@@ -33,62 +33,6 @@
 # - ACTION
 ######################################
 
-# Function to check if a resource group exists
-check_resource_group() {
-    echo "[INFO] Checking if resource group '${RESOURCE_GROUP_NAME}' exists..."
-
-    if az group show --name "${RESOURCE_GROUP_NAME}" &>/dev/null; then
-        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' exists."
-        return 0
-    else
-        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' does not exist."
-        return 1
-    fi
-}
-
-# Function to create a resource group
-create_resource_group() {
-    echo "[INFO] Creating resource group '${RESOURCE_GROUP_NAME}' in location '${LOCATION}'..."
-    echo ""
-    if az group create \
-        --name "${RESOURCE_GROUP_NAME}" \
-        --location "${LOCATION}" \
-        ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} \
-        ${DEBUG_FLAG:+--debug}; then
-        echo ""
-        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' created successfully."
-        return 0
-    else
-        echo "[ERROR] Failed to create resource group '${RESOURCE_GROUP_NAME}'."
-        return 1
-    fi
-}
-
-# Function to delete a resource group
-delete_resource_group() {
-    echo "[INFO] Deleting resource group '${RESOURCE_GROUP_NAME}'..."
-
-    local confirm_flag=""
-    if [ "${YES_FLAG}" = true ]; then
-        confirm_flag="--yes"
-    fi
-    echo ""
-
-    if az group delete \
-        --name "${RESOURCE_GROUP_NAME}" \
-        ${confirm_flag} \
-        ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} \
-        ${DEBUG_FLAG:+--debug}; then
-
-        echo ""
-        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' deleted successfully."
-        return 0
-    else
-        echo ""
-        echo "[ERROR] Failed to delete resource group '${RESOURCE_GROUP_NAME}'."
-        return 1
-    fi
-}
 
 # Function to display help message
 show_help() {
@@ -96,8 +40,8 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  --resource-group-name <name> Resource group name (required)"
-    echo "  --location <location>        Azure region (default: eastus)"
     echo "  --action <action>            Action to perform: check, create, delete (required)"
+    echo "  --location <location>        Azure region (default: eastus)"
     echo "  --subscription-id <id>       Azure Subscription ID (optional)"
     echo "  --yes                        Skip confirmation for delete operation"
     echo "  --debug                      Enable debug mode"
@@ -118,16 +62,16 @@ show_help() {
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+        --action)
+            ARG_ACTION="$2"
+            shift 2
+            ;;        
         --resource-group-name)
             ARG_RESOURCE_GROUP_NAME="$2"
             shift 2
             ;;
         --location)
             ARG_LOCATION="$2"
-            shift 2
-            ;;
-        --action)
-            ARG_ACTION="$2"
             shift 2
             ;;
         --subscription-id)
@@ -210,6 +154,63 @@ display_configuration() {
         echo "[INFO] YES_FLAG: true"
     fi
     echo ""
+}
+
+# Function to check if a resource group exists
+check_resource_group() {
+    echo "[INFO] Checking if resource group '${RESOURCE_GROUP_NAME}' exists..."
+
+    if az group show --name "${RESOURCE_GROUP_NAME}" &>/dev/null; then
+        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' exists."
+        return 0
+    else
+        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' does not exist."
+        return 1
+    fi
+}
+
+# Function to create a resource group
+create_resource_group() {
+    echo "[INFO] Creating resource group '${RESOURCE_GROUP_NAME}' in location '${LOCATION}'..."
+    echo ""
+    if az group create \
+        --name "${RESOURCE_GROUP_NAME}" \
+        --location "${LOCATION}" \
+        ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} \
+        ${DEBUG_FLAG:+--debug}; then
+        echo ""
+        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' created successfully."
+        return 0
+    else
+        echo "[ERROR] Failed to create resource group '${RESOURCE_GROUP_NAME}'."
+        return 1
+    fi
+}
+
+# Function to delete a resource group
+delete_resource_group() {
+    echo "[INFO] Deleting resource group '${RESOURCE_GROUP_NAME}'..."
+
+    local confirm_flag=""
+    if [ "${YES_FLAG}" = true ]; then
+        confirm_flag="--yes"
+    fi
+    echo ""
+
+    if az group delete \
+        --name "${RESOURCE_GROUP_NAME}" \
+        ${confirm_flag} \
+        ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} \
+        ${DEBUG_FLAG:+--debug}; then
+
+        echo ""
+        echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' deleted successfully."
+        return 0
+    else
+        echo ""
+        echo "[ERROR] Failed to delete resource group '${RESOURCE_GROUP_NAME}'."
+        return 1
+    fi
 }
 
 # Function to handle resource group operations
