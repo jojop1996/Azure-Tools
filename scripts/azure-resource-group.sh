@@ -68,7 +68,7 @@ parse_arguments() {
         --action)
             ARG_ACTION="$2"
             shift 2
-            ;;        
+            ;;
         --resource-group-name)
             ARG_RESOURCE_GROUP_NAME="$2"
             shift 2
@@ -145,9 +145,7 @@ display_configuration() {
     echo "[INFO] ACTION: ${ACTION}"
     echo "[INFO] RESOURCE_GROUP_NAME: ${RESOURCE_GROUP_NAME}"
 
-    if [[ "${ACTION}" == "create" ]]; then
-        echo "[INFO] LOCATION: ${LOCATION}"
-    fi
+    echo "[INFO] LOCATION: ${LOCATION}"
 
     if [ ! -z "${SUBSCRIPTION_ID}" ]; then
         echo "[INFO] SUBSCRIPTION_ID: ${SUBSCRIPTION_ID}"
@@ -164,12 +162,12 @@ check_resource_group() {
     echo "[INFO] Checking if resource group '${RESOURCE_GROUP_NAME}' exists..."
     echo ""
 
-    if az group show --name "${RESOURCE_GROUP_NAME}" ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
-    echo ""
+    # This is strange because I suppress the error message if a resource group does not exist and debug is false
+    if az group show --name "${RESOURCE_GROUP_NAME}" ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} $DEBUG_ARG >"$DEBUG_OUT" 2>$([ -n "$DEBUG_ARG" ] && echo "$DEBUG_OUT" || echo "/dev/null"); then
+        echo ""
         echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' exists."
         return 0
     else
-    echo ""
         echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' does not exist."
         return 1
     fi
@@ -201,6 +199,7 @@ delete_resource_group() {
     if [ "${YES_FLAG}" = true ]; then
         confirm_flag="--yes"
     fi
+    
     echo ""
 
     if az group delete \
@@ -209,7 +208,6 @@ delete_resource_group() {
         ${SUBSCRIPTION_ID:+--subscription "${SUBSCRIPTION_ID}"} \
         $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
 
-        echo ""
         echo "[INFO] Resource group '${RESOURCE_GROUP_NAME}' deleted successfully."
         return 0
     else
