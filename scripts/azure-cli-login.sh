@@ -109,7 +109,7 @@ set_variables() {
     CLIENT_ID="${ARG_CLIENT_ID:-${AZURE_CLIENT_ID}}"
     CLIENT_SECRET="${ARG_CLIENT_SECRET:-${AZURE_CLIENT_SECRET}}"
     TENANT_ID="${ARG_TENANT_ID:-${AZURE_TENANT_ID}}"
-    
+
     # Optional variables
     SUBSCRIPTION_ID="${ARG_SUBSCRIPTION_ID:-${AZURE_SUBSCRIPTION_ID}}"
     FORCE_LOGIN="${FORCE_LOGIN_FLAG:-false}"
@@ -141,11 +141,11 @@ display_configuration() {
     echo ""
     echo "[INFO] CLIENT_ID: ${CLIENT_ID}"
     echo "[INFO] TENANT_ID: ${TENANT_ID}"
-    
+
     if [ ! -z "${SUBSCRIPTION_ID}" ]; then
         echo "[INFO] SUBSCRIPTION_ID: ${SUBSCRIPTION_ID}"
     fi
-    
+
     if [ "${FORCE_LOGIN}" = true ]; then
         echo "[INFO] FORCE_LOGIN: true"
     fi
@@ -156,10 +156,12 @@ display_configuration() {
 check_azure_cli_installed() {
     if ! command -v az &>/dev/null; then
         echo "[ERROR] Azure CLI is not installed"
+        echo ""
         exit 1
     fi
 
     echo "[INFO] Azure CLI is installed"
+    echo ""
     return 0
 }
 
@@ -167,10 +169,12 @@ check_azure_cli_installed() {
 check_azure_cli_authenticated() {
     if az account show $DEBUG_ARG >"$DEBUG_OUT" 2>&1; then
         local current_account=$(az account show --query name -o tsv $DEBUG_ARG >"$DEBUG_OUT" 2>&1)
+        echo ""
         echo "[INFO] Already authenticated to Azure CLI"
         echo "[INFO] Current account: ${current_account:-Unknown}"
         return 0
     else
+        echo ""
         echo "[INFO] Not currently authenticated to Azure CLI"
         return 1
     fi
